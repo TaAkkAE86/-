@@ -14,36 +14,15 @@ header {background:#4a6fa5;color:white;text-align:center;padding:15px;font-size:
 .item input {margin-right:10px;}
 .note {width:100%;margin:4px 0;font-size:12px;}
 </style>
-
 </head>
 
 <body>
 
-<header>📦 Checklist อยู่หอ</header>
+<header>📦 Checklist ย้ายหอ</header>
 <div class="container" id="app"></div>
 
-<script type="module">
+<script>
 
-// ✅ Firebase v10 (ถูกต้อง)
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-// ✅ ใส่ config ของคุณ
-const firebaseConfig = {
-  apiKey: "AIzaSyCXO3Ltn5ZdyDUZFq1VMGPteSVR6FcE-uc",
-  authDomain: "checklists-c5c0e.firebaseapp.com",
-  projectId: "checklists-c5c0e",
-  storageBucket: "checklists-c5c0e.firebasestorage.app",
-  messagingSenderId: "671107960516",
-  appId: "1:671107960516:web:40cbe474b827509d0d0391",
-  measurementId: "G-02JC49JXT4"
-};
-
-// ✅ init
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-// ✅ ข้อมูลครบ
 const data = {
 
 "ห้องน้ำ":[
@@ -89,9 +68,8 @@ const data = {
 
 };
 
-const appDiv = document.getElementById("app");
+const app = document.getElementById("app");
 
-// ✅ UI + Sync
 Object.keys(data).forEach(section => {
 
   const div = document.createElement("div");
@@ -103,13 +81,18 @@ Object.keys(data).forEach(section => {
 
   data[section].forEach(item => {
 
-    const id = section + "_" + item;
+    const key = section + "_" + item;
 
     const row = document.createElement("div");
     row.className = "item";
 
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
+    checkbox.checked = localStorage.getItem(key) === "true";
+
+    checkbox.onchange = () => {
+      localStorage.setItem(key, checkbox.checked);
+    };
 
     const label = document.createElement("span");
     label.textContent = item;
@@ -117,28 +100,10 @@ Object.keys(data).forEach(section => {
     const note = document.createElement("input");
     note.placeholder = "หมายเหตุ...";
     note.className = "note";
-
-    // ✅ โหลดจาก Cloud (real-time)
-    onSnapshot(doc(db, "checklist", id), (snap) => {
-      if (snap.exists()) {
-        checkbox.checked = snap.data().checked;
-        note.value = snap.data().note || "";
-      }
-    });
-
-    // ✅ บันทึก
-    checkbox.onchange = () => {
-      setDoc(doc(db, "checklist", id), {
-        checked: checkbox.checked,
-        note: note.value
-      });
-    };
+    note.value = localStorage.getItem(key+"_note") || "";
 
     note.oninput = () => {
-      setDoc(doc(db, "checklist", id), {
-        checked: checkbox.checked,
-        note: note.value
-      });
+      localStorage.setItem(key+"_note", note.value);
     };
 
     row.appendChild(checkbox);
@@ -148,7 +113,7 @@ Object.keys(data).forEach(section => {
     div.appendChild(note);
   });
 
-  appDiv.appendChild(div);
+  app.appendChild(div);
 });
 
 </script>
