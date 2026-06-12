@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checklist อยู่หอ</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"></script>
+
+<style>
+body {font-family:Arial;margin:0;background:#f5f7fa;}
+header {background:#4a6fa5;color:white;text-align:center;padding:15px;}
+.container {padding:10px;}
+.section {background:white;margin-bottom:10px;padding:10px;border-radius:12px;}
+.item {display:flex;align-items:center;margin:6px 0;}
+.item input {margin-right:10px;}
+.note {width:100%;margin:4px 0;}
+</style>
+</head>
+
+<body>
+
+<header>📦 Checklist อยู่หอ</header>
+<div class="container" id="app"></div>
+
+<script>
+
+// ✅ ใส่ config ตรงนี้
+
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCXO3Ltn5ZdyDUZFq1VMGPteSVR6FcE-uc",
+  authDomain: "checklists-c5c0e.firebaseapp.com",
+  projectId: "checklists-c5c0e",
+  storageBucket: "checklists-c5c0e.firebasestorage.app",
+  messagingSenderId: "671107960516",
+  appId: "1:671107960516:web:40cbe474b827509d0d0391",
+  measurementId: "G-02JC49JXT4"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+
+// ✅ รายการเต็ม
+const data = {
+"ห้องน้ำ":[
+"แปรงสีฟัน","ยาสีฟัน","แก้วไว้แปรงฟัน","ที่แขวนแปรงสีฟัน/ยาสีฟัน","กล่องรีเทนเนอร์",
+"เม็ดฟู่+อุปกรณ์ทำความสะอาดรี","น้ำยาบ้วนปาก","ไหมขัดฟัน","โฟมล้างหน้า","สบู่","แชมพู","ครีมนวด",
+"สบู่โจ๊ะโม๊ะ","ฟองน้ำขัดผิว","ถุงมือขัดผิว","ชั้นวางของในห้องน้ำ","น้ำยาล้างห้องน้ำ",
+"แปรงขัดห้องน้ำ","ผ้าเช็ดหน้า","ผ้าเช็ดผม","ครีมกันแดด","โลชั่นทาผิว","ครีมทามือ",
+"สำลีก้าน","สำลีแผ่น","กรรไกรตัดเล็บ","แหนบ","ตะขอแขวนผ้า","น้ำยาซักชุดชั้นใน"
+],
+
+"การนอน":[
+"หมอน","ผ้าห่ม","ผ้าปู","ท็อปเปอร์","หมอนข้าง",
+"ปลอกหมอนสำรอง","ผ้าปูสำรอง","ที่อุดหู"
+],
+
+"ครัว":[
+"จาน","ชาม","ช้อนส้อม","แก้วน้ำ","น้ำยาล้างจาน","ฟองน้ำล้างจาน",
+"ที่คว่ำจาน","หม้อไฟฟ้า","มีด","เขียง","กล่องอาหาร","ช้อนกาแฟ",
+"ที่เปิดกระป๋อง","ถุงซิปล็อก"
+],
+
+"ส่วนกลาง":[
+"พรมเช็ดเท้า","ปลั๊กพ่วง","ตะกร้าผ้า","กะละมัง","ไม้แขวนเสื้อ","ที่หนีบผ้า",
+"ราวตากผ้า","ผ้าขนหนู","ไดร์","ชั้นวางของ","กล่องปิดสนิท",
+"ทิชชู่เปียก","ไม้ถูพื้น","ตู้เย็น","ไฟฉาย","ร่ม","หวี",
+"ถังขยะ","ถุงขยะ","โคมไฟ","หูฟัง","พัดลม","น้ำหอม",
+"ผงซักฟอก","น้ำยาปรับผ้านุ่ม","น้ำยาทำความสะอาด",
+"ถุงมือยาง","ลูกกลิ้งฝุ่น","ผ้าไมโครไฟเบอร์"
+],
+
+"ยา":[
+"พารา","ยาแก้แพ้","ยาแก้ท้องเสีย","พลาสเตอร์","เบตาดีน",
+"กล่องยา","Power Bank","สายชาร์จ","แบตไฟฉาย"
+]
+};
+
+const appDiv = document.getElementById("app");
+
+// ✅ สร้าง UI
+Object.keys(data).forEach(section => {
+
+  const sec = document.createElement("div");
+  sec.className = "section";
+
+  const title = document.createElement("h3");
+  title.textContent = section;
+  sec.appendChild(title);
+
+  data[section].forEach(item => {
+    const id = section + "_" + item;
+
+    const row = document.createElement("div");
+    row.className = "item";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+
+    const note = document.createElement("input");
+    note.placeholder = "หมายเหตุ";
+    note.className = "note";
+
+    // ✅ โหลดข้อมูลจาก Cloud
+    db.collection("checklist").doc(id).onSnapshot(doc => {
+      if (doc.exists) {
+        checkbox.checked = doc.data().checked;
+        note.value = doc.data().note || "";
+      }
+    });
+
+    // ✅ บันทึก Cloud
+    checkbox.onchange = () => {
+      db.collection("checklist").doc(id).set({
+        checked: checkbox.checked,
+        note: note.value
+      });
+    };
+
+    note.oninput = () => {
+      db.collection("checklist").doc(id).set({
+        checked: checkbox.checked,
+        note: note.value
+      });
+    };
+
+    row.appendChild(checkbox);
+    row.appendChild(document.createTextNode(item));
+
+    sec.appendChild(row);
+    sec.appendChild(note);
+  });
+
+  appDiv.appendChild(sec);
+});
+
+</script>
+
+</body>
+</html>
