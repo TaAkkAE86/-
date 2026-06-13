@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Checklist ย้ายหอ 🏠</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #fef6ff;
+  color: #4a4a6a;
+  min-height: 100vh;
+}
+
+/* ── Loading Overlay ── */
+.loading-overlay {
+  position: fixed; inset: 0;
+  background: #fef6ff;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 9999; gap: 16px;
+  transition: opacity .4s;
+}
+.loading-overlay.hidden { opacity: 0; pointer-events: none; }
+.spinner {
+  width: 44px; height: 44px;
+  border: 3px solid #f0e0ff;
+  border-top-color: #c9b3f5;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { color: #c0a0e0; font-size: 14px; font-weight: 600; }
+
+/* ── Sync Badge ── */
+.sync-badge {
+  position: fixed; bottom: 16px; right: 16px;
+  background: white; border-radius: 20px;
+  padding: 7px 13px; font-size: 12px; font-weight: 600;
+  box-shadow: 0 2px 14px rgba(180,140,220,.2);
+  display: flex; align-items: center; gap: 6px;
+  z-index: 500; color: #b0a0c8;
+  transition: all .3s;
+}
+.sync-badge.saving  { color: #f5a623; }
+.sync-badge.saved   { color: #43a047; }
+.sync-badge.offline { color: #e53935; }
+.sync-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor;
+  animation: none;
+}
+.sync-badge.saving .sync-dot {
+  animation: pulse .8s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity: 1; } 50% { opacity: .3; }
+}
+
+/* ── Header ── */
+header {
+  background: linear-gradient(135deg, #c9b3f5 0%, #f5b3d8 100%);
+  color: white; text-align: center;
+  padding: 18px 16px 14px;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 3px 16px rgba(180,140,220,.3);
+}
+header h1 { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
+header p  { font-size: 12px; opacity: .88; margin-top: 3px; }
+
+.stats-bar {
+  display: flex; justify-content: center;
+  gap: 7px; margin-top: 10px; flex-wrap: wrap;
+}
+.stat-pill {
+  background: rgba(255,255,255,.28);
+  border-radius: 20px; padding: 4px 11px;
+  font-size: 11px; display: flex;
+  align-items: center; gap: 5px; font-weight: 600;
+}
+
+/* ── Container ── */
+.container {
+  max-width: 700px; margin: 0 auto;
+  padding: 14px 12px 100px;
+}
+
+.legend {
+  display: flex; justify-content: center; gap: 14px;
+  padding: 8px 0 6px; font-size: 11px; color: #b0a0c8;
+}
+.legend span { display: flex; align-items: center; gap: 4px; }
+
+/* ── Section Card ── */
+.section {
+  background: white; border-radius: 20px;
+  margin-bottom: 14px; overflow: hidden;
+  box-shadow: 0 2px 14px rgba(180,140,220,.10);
+  animation: fadeIn .25s ease;
+}
+@keyframes fadeIn { from { opacity:0; transform:translateY(6px); } }
+
+.section-header {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px; cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid #f3eeff; gap: 8px;
+}
+.section-title {
+  font-size: 15px; font-weight: 700;
+  display: flex; align-items: center; gap: 7px; flex: 1;
+}
+.section-right {
+  display: flex; align-items: center;
+  gap: 7px; flex-shrink: 0;
+}
+.section-progress {
+  font-size: 11px; color: #b0a0d0;
+  background: #f5f0ff; padding: 3px 9px;
+  border-radius: 12px; font-weight: 600;
+}
+.collapse-arrow {
+  font-size: 11px; color: #c8b8e8;
+  transition: transform .22s; line-height: 1;
+}
+.section-header.collapsed .collapse-arrow { transform: rotate(-90deg); }
+
+.section-body { padding: 4px 0; }
+
+/* ── Item Row ── */
+.item {
+  display: flex; align-items: center;
+  padding: 8px 14px; gap: 8px;
+  transition: background .15s;
+}
+.item:hover { background: #fdf8ff; }
+
+.item-name {
+  flex: 1; font-size: 14px; color: #4a4a6a;
+  word-break: break-word; line-height: 1.4;
+  transition: color .2s;
+}
+.item-name.done { text-decoration: line-through; color: #c8b8e0; }
+
+/* ── Check Buttons ── */
+.check-group { display: flex; gap: 5px; flex-shrink: 0; }
+
+.check-btn {
+  display: flex; align-items: center; gap: 3px;
+  padding: 5px 9px; border-radius: 12px;
+  border: 1.5px solid #e8d8f8; cursor: pointer;
+  font-size: 11px; font-weight: 700;
+  transition: all .18s; background: white; color: #c8b8e0;
+  white-space: nowrap; font-family: inherit; line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+.check-btn.have.active {
+  background: #edf7ee; border-color: #81c784; color: #43a047;
+}
+.check-btn.bought.active {
+  background: #e8f4fd; border-color: #64b5f6; color: #1e88e5;
+}
+
+/* ── Delete Buttons ── */
+.delete-btn {
+  background: none; border: none; cursor: pointer;
+  color: #e2d4f4; font-size: 13px; padding: 5px;
+  border-radius: 8px; transition: color .2s;
+  line-height: 1; flex-shrink: 0;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.delete-btn:hover { color: #f06292; }
+
+.del-sec-btn {
+  background: none; border: none; cursor: pointer;
+  color: #ddd0f0; font-size: 14px; padding: 3px 5px;
+  border-radius: 8px; transition: color .2s; line-height: 1;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.del-sec-btn:hover { color: #f06292; }
+
+/* ── Add Item Area ── */
+.add-area {
+  display: flex; align-items: center;
+  padding: 8px 14px 12px; gap: 7px;
+  border-top: 1px solid #f3eeff; margin-top: 4px;
+}
+.add-input {
+  flex: 1; border: 1.5px solid #ead8ff;
+  border-radius: 12px; padding: 7px 12px;
+  font-size: 13px; outline: none; color: #4a4a6a;
+  background: #faf7ff; font-family: inherit;
+  transition: border-color .18s, background .18s;
+}
+.add-input:focus { border-color: #c0a0f0; background: white; }
+.add-input::placeholder { color: #d4c4ec; }
+
+.add-btn {
+  background: linear-gradient(135deg, #c9b3f5, #f5b3d8);
+  color: white; border: none; border-radius: 12px;
+  width: 36px; height: 34px; font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; flex-shrink: 0; font-family: inherit;
+  transition: opacity .18s, transform .12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.add-btn:hover  { opacity: .85; }
+.add-btn:active { transform: scale(.92); }
+
+/* ── New Section Card ── */
+.new-section-wrap { margin-top: 6px; }
+.new-section-label {
+  font-size: 12px; color: #c0b0d8; font-weight: 600;
+  text-align: center; margin-bottom: 8px;
+}
+.add-section-card {
+  background: white; border-radius: 18px;
+  padding: 12px 14px; display: flex; gap: 8px;
+  box-shadow: 0 2px 12px rgba(180,140,220,.10);
+}
+.add-section-input {
+  flex: 1; border: 1.5px solid #ead8ff;
+  border-radius: 12px; padding: 9px 13px;
+  font-size: 14px; outline: none; color: #4a4a6a;
+  background: #faf7ff; font-family: inherit;
+  transition: border-color .18s, background .18s;
+}
+.add-section-input:focus { border-color: #c0a0f0; background: white; }
+.add-section-input::placeholder { color: #d4c4ec; }
+.add-section-btn {
+  background: linear-gradient(135deg, #c9b3f5, #f5b3d8);
+  color: white; border: none; border-radius: 12px;
+  padding: 9px 14px; font-size: 13px; font-weight: 700;
+  cursor: pointer; white-space: nowrap; font-family: inherit;
+  transition: opacity .18s;
+  -webkit-tap-highlight-color: transparent;
+}
+.add-section-btn:hover { opacity: .85; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 22px; left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: #4a3a6a; color: white;
+  padding: 10px 20px; border-radius: 20px; font-size: 13px;
+  transition: transform .28s cubic-bezier(.34,1.56,.64,1);
+  z-index: 997; white-space: nowrap; pointer-events: none;
+  box-shadow: 0 4px 16px rgba(80,50,120,.22);
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ── Responsive ── */
+@media (min-width: 600px) {
+  header h1       { font-size: 24px; }
+  .item-name      { font-size: 15px; }
+  .check-btn      { font-size: 12px; padding: 6px 11px; }
+  .container      { padding: 20px 20px 100px; }
+  .section-title  { font-size: 16px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">กำลังโหลด... ☁️</div>
+</div>
+
+<!-- Header -->
+<header>
+  <h1>📦 Checklist ย้ายหอ</h1>
+  <p>ซิงค์อัตโนมัติทุกอุปกรณ์ 🌸</p>
+  <div class="stats-bar">
+    <div class="stat-pill">✅ มีแล้ว <strong id="stat-have">0</strong></div>
+    <div class="stat-pill">🛒 ซื้อแล้ว <strong id="stat-bought">0</strong></div>
+    <div class="stat-pill">📋 ทั้งหมด <strong id="stat-total">0</strong></div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="legend">
+    <span><span style="color:#43a047;font-weight:700">✓</span> มีแล้ว</span>
+    <span><span style="color:#1e88e5">🛒</span> ซื้อแล้ว</span>
+    <span>✕ ลบรายการ</span>
+  </div>
+
+  <div id="app"></div>
+
+  <div class="new-section-wrap">
+    <div class="new-section-label">✦ เพิ่มหมวดหมู่ใหม่</div>
+    <div class="add-section-card">
+      <input class="add-section-input" id="new-section-input"
+             placeholder="เช่น เสื้อผ้า, เครื่องเขียน..." maxlength="30">
+      <button class="add-section-btn" onclick="addSection()">+ เพิ่มหมวด</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sync Badge -->
+<div class="sync-badge saved" id="sync-badge">
+  <div class="sync-dot"></div>
+  <span id="sync-text">ซิงค์แล้ว</span>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ════════════════════════════════════════
+   🔥 FIREBASE CONFIG
+   → วาง config จาก Firebase Console ที่นี่
+════════════════════════════════════════ */
+const firebaseConfig = {
+  apiKey: "AIzaSyCXO3Ltn5ZdyDUZFq1VMGPteSVR6FcE-uc",
+  authDomain: "checklists-c5c0e.firebaseapp.com",
+  databaseURL: "https://checklists-c5c0e-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "checklists-c5c0e",
+  storageBucket: "checklists-c5c0e.firebasestorage.app",
+  messagingSenderId: "671107960516",
+  appId: "1:671107960516:web:40cbe474b827509d0d0391",
+  measurementId: "G-02JC49JXT4"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db   = firebase.database();
+const ROOT = 'checklist'; // node หลักใน database
+
+/* ════════════════════════════════════════
+   DEFAULT DATA
+════════════════════════════════════════ */
+const ICONS = {
+  "ห้องน้ำ":"🚿","การนอน":"🛏️","ครัว":"🍳",
+  "ส่วนกลาง":"🏠","ยาและฉุกเฉิน":"💊","อุปกรณ์ทั่วไป":"📎"
+};
+
+const DEFAULT_ORDER = [
+  "ห้องน้ำ","การนอน","ครัว","ส่วนกลาง","ยาและฉุกเฉิน","อุปกรณ์ทั่วไป"
+];
+
+const DEFAULT_ITEMS = {
+  "ห้องน้ำ":[
+    "แปรงสีฟัน","ยาสีฟัน","แก้วไว้แปรงฟัน","ที่แขวนแปรงสีฟัน-ยาสีฟัน",
+    "กล่องรีเทนเนอร์","เม็ดฟู่+อุปกรณ์ทำความสะอาดรี","น้ำยาบ้วนปาก",
+    "ไหมขัดฟัน","โฟมล้างหน้า","สบู่","แชมพู","ครีมนวด","สบู่โจ๊ะโม๊ะ",
+    "ฟองน้ำขัดผิว","ถุงมือขัดผิว","ชั้นวางของในห้องน้ำ","น้ำยาล้างห้องน้ำ",
+    "แปรงขัดห้องน้ำ","ผ้าเช็ดหน้า","ผ้าเช็ดผม","ครีมกันแดด","โลชั่นทาผิว",
+    "ครีมทามือ","สำลีก้าน","สำลีแผ่น","กรรไกรตัดเล็บ","แหนบ",
+    "ตะขอแขวนผ้าเช็ดตัว","น้ำยาซักชุดชั้นใน"
+  ],
+  "การนอน":[
+    "หมอน","ผ้าห่ม","ผ้าปู","ท็อปเปอร์","หมอนข้าง",
+    "ปลอกหมอนสำรอง","ผ้าปูสำรอง 1 ชุด","ที่อุดหู"
+  ],
+  "ครัว":[
+    "จาน","ชาม","ช้อนส้อม","แก้วน้ำ","น้ำยาล้างจาน","ฟองน้ำล้างจาน",
+    "ที่คว่ำจานชาม","หม้อไฟฟ้า","มีดเล็ก","เขียง","กล่องถนอมอาหาร",
+    "ช้อนชงกาแฟ","ที่เปิดกระป๋อง-ขวด","ถุงซิปล็อก"
+  ],
+  "ส่วนกลาง":[
+    "พรมเช็ดเท้า","ปลั๊กพ่วง","ตะกร้าผ้า","ตะกร้าชุดชั้นใน","ตะกร้าผ้าซัก",
+    "กะละมัง","ไม้แขวนเสื้อ","ที่หนีบผ้า","พวงหนีบ","ราวตากผ้า","ผ้าขนหนู",
+    "ไดร์เป่าผม","ชั้นวางครีม","กล่องเก็บของฝาปิด","ทิชชู่เปียกทำความสะอาด",
+    "ทิชชู่เปียกถูห้อง","ไม้ถูพื้นทิชชู่","ตู้เย็น","ไฟฉาย","ร่ม","หวี",
+    "ทิชชู่เช็ดหน้า","ทิชชู่เช็ดของ","ถังขยะ","ถุงขยะ","โคมไฟ","หูฟัง",
+    "พัดลม","น้ำหอมปรับอากาศ","ผงซักฟอก-น้ำยาซักผ้า","น้ำยาปรับผ้านุ่ม",
+    "ไม้แขวนชุดชั้นใน","สเปรย์เช็ดกระจก","น้ำยาทำความสะอาด","ถุงมือยาง",
+    "ลูกกลิ้งเก็บฝุ่น","ผ้าไมโครไฟเบอร์"
+  ],
+  "ยาและฉุกเฉิน":[
+    "พาราเซตามอล","ยาแก้แพ้","ยาแก้ท้องเสีย","พลาสเตอร์ยา","เบตาดีน",
+    "กล่องยา","Power Bank","สายชาร์จสำรอง","แบตเตอรี่ไฟฉาย"
+  ],
+  "อุปกรณ์ทั่วไป":[
+    "แฟ้มเอกสาร","กรรไกร","เทปใส","ปากกา","คัตเตอร์"
+  ]
+};
+
+/* ════════════════════════════════════════
+   STATE
+════════════════════════════════════════ */
+let appOrder   = [];   // ["ห้องน้ำ", "การนอน", ...]
+let appItems   = {};   // { "hvxng-nam": ["item1", ...] }  (sanitized keys)
+let appStates  = {};   // { "sec|||item": { have, bought } }
+let collapsed  = {};   // { "ห้องน้ำ": true/false }
+let firstLoad  = true;
+
+/* ════════════════════════════════════════
+   KEY HELPERS
+   Firebase ห้ามใช้: . # $ [ ] /  ในชื่อ key
+════════════════════════════════════════ */
+const san = s  => String(s).replace(/[.#$[\]\/]/g, '-');
+const sk  = (sec, item) => san(sec) + '|||' + san(item); // state key
+
+/* ════════════════════════════════════════
+   FIREBASE — INIT & LISTEN
+════════════════════════════════════════ */
+function initFirebase() {
+
+  // รับข้อมูลจาก Firebase แบบ real-time
+  db.ref(ROOT).on('value', snap => {
+    const raw = snap.val();
+
+    if (!raw || !raw.sectionsOrder) {
+      // ครั้งแรก: เขียนข้อมูล default
+      writeDefaultData();
+      return;
+    }
+
+    // parse sectionsOrder
+    appOrder = toArr(raw.sectionsOrder);
+
+    // parse items  (key = sanitized section name)
+    appItems = {};
+    if (raw.items) {
+      Object.keys(raw.items).forEach(k => {
+        appItems[k] = toArr(raw.items[k]).filter(Boolean);
+      });
+    }
+
+    // parse states
+    appStates = raw.states || {};
+
+    // ซ่อน loading และ render
+    if (firstLoad) {
+      document.getElementById('loading').classList.add('hidden');
+      setTimeout(() => {
+        document.getElementById('loading').style.display = 'none';
+      }, 400);
+      firstLoad = false;
+    }
+
+    renderApp();
+    updateStats();
+    setSyncStatus('saved', '☁️ ซิงค์แล้ว');
+
+  }, err => {
+    console.error(err);
+    setSyncStatus('offline', '⚠️ เชื่อมต่อไม่ได้');
+  });
+
+  // แสดงสถานะออนไลน์/ออฟไลน์
+  db.ref('.info/connected').on('value', snap => {
+    if (!firstLoad) {
+      setSyncStatus(
+        snap.val() ? 'saved'   : 'offline',
+        snap.val() ? '☁️ ออนไลน์' : '⚠️ ออฟไลน์'
+      );
+    }
+  });
+}
+
+function toArr(v) {
+  if (!v) return [];
+  return Array.isArray(v) ? v : Object.values(v);
+}
+
+function writeDefaultData() {
+  const items = {};
+  DEFAULT_ORDER.forEach(sec => { items[san(sec)] = DEFAULT_ITEMS[sec]; });
+  db.ref(ROOT).set({ sectionsOrder: DEFAULT_ORDER, items, states: {} });
+}
+
+/* ════════════════════════════════════════
+   FIREBASE — WRITE HELPERS
+════════════════════════════════════════ */
+function saveItems(secKey) {
+  setSyncStatus('saving', '💾 บันทึก...');
+  return db.ref(`${ROOT}/items/${secKey}`).set(appItems[secKey] || []);
+}
+
+function saveOrder() {
+  setSyncStatus('saving', '💾 บันทึก...');
+  return db.ref(`${ROOT}/sectionsOrder`).set(appOrder);
+}
+
+function saveState(sec, item, state) {
+  setSyncStatus('saving', '💾 บันทึก...');
+  db.ref(`${ROOT}/states/${sk(sec,item)}`).set(state);
+}
+
+function removeState(sec, item) {
+  db.ref(`${ROOT}/states/${sk(sec,item)}`).remove();
+}
+
+/* ════════════════════════════════════════
+   UI HELPERS
+════════════════════════════════════════ */
+function setSyncStatus(cls, text) {
+  const b = document.getElementById('sync-badge');
+  b.className = 'sync-badge ' + cls;
+  document.getElementById('sync-text').textContent = text;
+}
+
+let _toastT;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(_toastT);
+  _toastT = setTimeout(() => el.classList.remove('show'), 2300);
+}
+
+/* ════════════════════════════════════════
+   STATS
+════════════════════════════════════════ */
+function updateStats() {
+  let total = 0, have = 0, bought = 0;
+  appOrder.forEach(sec => {
+    (appItems[san(sec)] || []).forEach(item => {
+      total++;
+      const st = appStates[sk(sec,item)] || {};
+      if (st.have)   have++;
+      if (st.bought) bought++;
+    });
+  });
+  document.getElementById('stat-total').textContent  = total;
+  document.getElementById('stat-have').textContent   = have;
+  document.getElementById('stat-bought').textContent = bought;
+}
+
+function progOf(sec) {
+  const items = appItems[san(sec)] || [];
+  const done  = items.filter(item => {
+    const st = appStates[sk(sec,item)] || {};
+    return st.have || st.bought;
+  }).length;
+  return { done, total: items.length };
+}
+
+function refreshBadge(secKey, sec) {
+  const el = document.getElementById('prog-' + secKey);
+  if (el) { const p = progOf(sec); el.textContent = `${p.done}/${p.total}`; }
+}
+
+/* ════════════════════════════════════════
+   RENDER
+════════════════════════════════════════ */
+function renderApp() {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+
+  appOrder.forEach(sec => {
+    const secKey = san(sec);
+    const items  = appItems[secKey] || [];
+    const icon   = ICONS[sec] || '📌';
+    const prog   = progOf(sec);
+
+    /* Card */
+    const card = document.createElement('div');
+    card.className = 'section';
+
+    /* Header */
+    const hdr = document.createElement('div');
+    hdr.className = 'section-header' + (collapsed[sec] ? ' collapsed' : '');
+    hdr.innerHTML = `
+      <div class="section-title">${icon} ${sec}</div>
+      <div class="section-right">
+        <div class="section-progress" id="prog-${secKey}">${prog.done}/${prog.total}</div>
+        <button class="del-sec-btn" title="ลบหมวด">🗑</button>
+        <span class="collapse-arrow">▼</span>
+      </div>`;
+
+    // ปุ่มลบหมวด
+    hdr.querySelector('.del-sec-btn').onclick = e => {
+      e.stopPropagation();
+      if (!confirm(`ลบหมวด "${sec}" และรายการทั้งหมด ${items.length} รายการ?`)) return;
+      items.forEach(item => removeState(sec, item));
+      appOrder = appOrder.filter(s => s !== sec);
+      delete appItems[secKey];
+      db.ref(ROOT).update({
+        sectionsOrder: appOrder,
+        [`items/${secKey}`]: null
+      });
+      showToast(`🗑 ลบหมวด "${sec}" แล้ว`);
+    };
+
+    /* Body */
+    const body = document.createElement('div');
+    body.className = 'section-body';
+    body.style.display = collapsed[sec] ? 'none' : '';
+
+    // Collapse toggle
+    hdr.onclick = e => {
+      if (e.target.closest('.del-sec-btn')) return;
+      collapsed[sec] = !collapsed[sec];
+      body.style.display = collapsed[sec] ? 'none' : '';
+      hdr.classList.toggle('collapsed', !!collapsed[sec]);
+    };
+
+    /* Items */
+    items.forEach((item, idx) => {
+      const st  = Object.assign({ have:false, bought:false },
+                                 appStates[sk(sec,item)] || {});
+      const row = document.createElement('div');
+      row.className = 'item';
+
+      // ชื่อรายการ
+      const nameEl = document.createElement('span');
+      nameEl.className = 'item-name' + ((st.have||st.bought) ? ' done' : '');
+      nameEl.textContent = item;
+
+      const grp = document.createElement('div');
+      grp.className = 'check-group';
+
+      // ✓ มีแล้ว
+      const haveBtn = document.createElement('button');
+      haveBtn.className = 'check-btn have' + (st.have ? ' active' : '');
+      haveBtn.textContent = '✓ มีแล้ว';
+      haveBtn.onclick = () => {
+        st.have = !st.have;
+        appStates[sk(sec,item)] = st;
+        haveBtn.classList.toggle('active', st.have);
+        nameEl.className = 'item-name' + ((st.have||st.bought) ? ' done' : '');
+        refreshBadge(secKey, sec);
+        updateStats();
+        saveState(sec, item, st);
+      };
+
+      // 🛒 ซื้อแล้ว
+      const buyBtn = document.createElement('button');
+      buyBtn.className = 'check-btn bought' + (st.bought ? ' active' : '');
+      buyBtn.textContent = '🛒 ซื้อแล้ว';
+      buyBtn.onclick = () => {
+        st.bought = !st.bought;
+        appStates[sk(sec,item)] = st;
+        buyBtn.classList.toggle('active', st.bought);
+        nameEl.className = 'item-name' + ((st.have||st.bought) ? ' done' : '');
+        refreshBadge(secKey, sec);
+        updateStats();
+        saveState(sec, item, st);
+      };
+
+      grp.appendChild(haveBtn);
+      grp.appendChild(buyBtn);
+
+      // ✕ ลบรายการ
+      const delBtn = document.createElement('button');
+      delBtn.className = 'delete-btn';
+      delBtn.textContent = '✕';
+      delBtn.title = 'ลบรายการ';
+      delBtn.onclick = () => {
+        if (!confirm(`ลบ "${item}" ออกจากรายการ?`)) return;
+        removeState(sec, item);
+        appItems[secKey].splice(idx, 1);
+        saveItems(secKey);
+        showToast('ลบรายการแล้ว ✕');
+      };
+
+      row.appendChild(nameEl);
+      row.appendChild(grp);
+      row.appendChild(delBtn);
+      body.appendChild(row);
+    });
+
+    /* Add item row */
+    const addArea = document.createElement('div');
+    addArea.className = 'add-area';
+
+    const inp = document.createElement('input');
+    inp.className = 'add-input';
+    inp.placeholder = 'เพิ่มรายการใหม่... กด Enter';
+    inp.maxLength = 60;
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-btn';
+    addBtn.textContent = '+';
+
+    const doAdd = () => {
+      const val = inp.value.trim();
+      if (!val) { inp.focus(); return; }
+      if (!appItems[secKey]) appItems[secKey] = [];
+      appItems[secKey].push(val);
+      inp.value = '';
+      saveItems(secKey);
+      showToast(`✨ เพิ่ม "${val}" แล้ว`);
+    };
+
+    addBtn.onclick = doAdd;
+    inp.onkeydown = e => { if (e.key === 'Enter') doAdd(); };
+
+    addArea.appendChild(inp);
+    addArea.appendChild(addBtn);
+    body.appendChild(addArea);
+
+    card.appendChild(hdr);
+    card.appendChild(body);
+    app.appendChild(card);
+  });
+}
+
+/* ════════════════════════════════════════
+   ADD SECTION
+════════════════════════════════════════ */
+function addSection() {
+  const inp = document.getElementById('new-section-input');
+  const val = inp.value.trim();
+  if (!val) { inp.focus(); return; }
+  if (appOrder.includes(val)) {
+    showToast('⚠️ มีหมวดนี้อยู่แล้ว'); return;
+  }
+  appOrder.push(val);
+  appItems[san(val)] = [];
+  db.ref(ROOT).update({
+    sectionsOrder: appOrder,
+    [`items/${san(val)}`]: []
+  });
+  inp.value = '';
+  showToast(`🎉 เพิ่มหมวด "${val}" แล้ว`);
+}
+
+document.getElementById('new-section-input')
+  .addEventListener('keydown', e => { if (e.key === 'Enter') addSection(); });
+
+/* ════════════════════════════════════════
+   START 🚀
+════════════════════════════════════════ */
+initFirebase();
+</script>
+</body>
+</html>
